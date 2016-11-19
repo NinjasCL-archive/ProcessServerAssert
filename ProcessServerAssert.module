@@ -82,8 +82,12 @@ class ProcessServerAssert extends Process {
 	}
 
 	public function uninstall() {
+		
 		$page = $this->pages->get('name=njs-server-assert');
-		if(count($page)) $this->pages->delete($page, true);
+
+		if($page instanceof Page) {
+			$this->pages->delete($page, true);	
+		} 
 	}
 
 	public function execute() {
