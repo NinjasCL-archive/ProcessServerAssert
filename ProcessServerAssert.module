@@ -1,0 +1,195 @@
+<?php namespace ProcessWire;
+
+/* 
+Process Server Assert.
+This script contains code available in the install.php
+of ProcessWire.
+
+MIT License
+
+Copyright (c) 2016 Camilo Castro - Ninjas.cl
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
+class ProcessServerAssert extends Process {
+
+	/**
+	 * Minimum required PHP version to install ProcessWire
+	 *
+	 */
+	const MIN_REQUIRED_PHP_VERSION = '5.3.8';
+
+	private $errorCounter = 0;
+
+	public static function getModuleInfo() {
+		return  [
+			'title' => 'Server Assert',
+			'summary' => __('Simple Module for Asserting if the server pass the minimum requirements for Processwire.'),
+			'version' => 100,
+			'author' => 'Ninjas.cl',
+			'singular' => true,
+			'href' => 'https://github.com/NinjasCL/ProcessServerAssert'
+		];
+	}
+
+	/**
+	 * Check if the given function $name exists and report OK or fail with $label
+	 *
+	 */
+	protected function checkFunction($name, $label) {
+		
+		if(function_exists($name)) {
+		
+			$this->message("$label"); 
+		
+		} else {
+		
+			$this->error("Fail: $label"); 	
+			$this->errorCounter++;
+		} 
+	}
+
+	public function install() {
+
+			$page = new Page();
+			$page->template = 'admin';
+			$page->name = 'njs-server-assert';
+			$page->title = 'Server Assert';
+			$page->save();
+
+			$page->process = 'ProcessServerAssert';
+			$admin = $this->pages->get($this->config->adminRootPageID);
+			$page->parent = $admin;
+
+			$page->save();
+	}
+
+	public function uninstall() {
+		$page = $this->pages->get('name=njs-server-assert');
+		if(count($page)) $this->pages->delete($page, true);
+	}
+
+	public function execute() {
+
+		$this->errorCounter = 0;
+
+		if(version_compare(PHP_VERSION, self::MIN_REQUIRED_PHP_VERSION) >= 0) {
+			$this->message("PHP version " . PHP_VERSION);
+		} else {
+			$this->error("ProcessWire requires PHP version " . self::MIN_REQUIRED_PHP_VERSION . " or newer. You are running PHP " . PHP_VERSION);
+			$this->errorCounter++;
+		}
+
+		if(extension_loaded('pdo_mysql')) {
+			$this->message("PDO (mysql) database"); 
+		} else {
+			$this->error("PDO (pdo_mysql) is required (for MySQL database)"); 
+			$this->errorCounter++;
+		}
+
+		$this->checkFunction("filter_var", "Filter functions (filter_var)");
+		
+		$this->checkFunction("mysqli_connect", "MySQLi (not required by core, but may be required by some 3rd party modules)");
+		
+		$this->checkFunction("imagecreatetruecolor", "GD 2.0 or newer"); 
+		
+		$this->checkFunction("json_encode", "JSON support");
+		
+		$this->checkFunction("preg_match", "PCRE support"); 
+		
+		$this->checkFunction("ctype_digit", "CTYPE support");
+		
+		$this->checkFunction("iconv", "ICONV support"); 
+		
+		$this->checkFunction("session_save_path", "SESSION support"); 
+		
+		$this->checkFunction("hash", "HASH support"); 
+		
+		$this->checkFunction("spl_autoload_register", "SPL support"); 
+
+		if(function_exists('apache_get_modules')) {
+
+			if(in_array('mod_rewrite', apache_get_modules())) {
+
+				$this->message("Found Apache module: mod_rewrite"); 
+
+			} else { 
+
+				$this->warning("Apache mod_rewrite does not appear to be installed and is required by ProcessWire. Maybe you are using Nginx or another web server. If you know what are you doing you can ignore this message."); 
+
+				$this->errorCounter++;
+			}
+
+		} else {
+			// apache_get_modules doesn't work on a cgi installation.
+			// check for environment var set in htaccess file, as submitted by jmarjie. 
+			$mod_rewrite = getenv('HTTP_MOD_REWRITE') == 'On' || getenv('REDIRECT_HTTP_MOD_REWRITE') == 'On' ? true : false;
+			if($mod_rewrite) {
+				$this->message("Found Apache module (cgi): mod_rewrite");
+			} else {
+				$this->warning("Unable to determine if Apache mod_rewrite (required by ProcessWire) is installed. On some servers, we may not be able to detect it until your .htaccess file is place. Please click the 'check again' button at the bottom of this screen, if you haven't already. Maybe you are using Nginx or another web server. If you know what are you doing you can ignore this message."); 
+
+				$this->errorCounter++;
+			}
+		}
+
+		if(class_exists('\ZipArchive')) {
+			$this->message("ZipArchive support"); 
+
+		} else {
+			
+			$this->warning("ZipArchive support was not found. This is recommended, but not required to complete installation."); 
+
+			$this->errorCounter++;
+		}
+
+		if(is_writable("../../site/config.php")) { 
+			
+			$this->warning("/site/config.php is writable. Please adjust the server permissions."); 
+
+			$this->errorCounter++;
+
+		} else {
+			$this->message("/site/config.php is not writable."); 
+
+		}
+
+		if(!is_file("../../.htaccess") || !is_readable("../../.htaccess")) {
+			
+			$this->warning("/.htaccess doesn't exist. Before continuing, you should rename the included htaccess.txt file to be .htaccess (with the period in front of it, and no '.txt' at the end). Maybe you are using Nginx or another web server. If you know what are you doing you can ignore this message.");
+
+			$this->errorCounter++;
+
+		} else if(!strpos(file_get_contents("../../.htaccess"), "PROCESSWIRE")) {
+
+			$this->warning("/.htaccess file exists, but is not for ProcessWire. Please overwrite or combine it with the provided /htaccess.txt file (i.e. rename /htaccess.txt to /.htaccess, with the period in front). Maybe you are using Nginx or another web server. If you know what are you doing you can ignore this message."); 
+
+			$this->errorCounter++;
+
+		} else {
+			$this->message(".htaccess looks good"); 
+		}
+
+		
+		$this->message('Remember if you are using InnoDB, MySQL version should be >= 5.6.4');
+
+		return 	sprintf(__("Assertion Complete with (%d) Warnings"), $this->errorCounter);
+	}
+}
