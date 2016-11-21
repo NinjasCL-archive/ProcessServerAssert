@@ -163,7 +163,7 @@ class ServerAssert {
 	}
 
 
-	public static function assert($path) {
+	public static function assert($path = './') {
 
 		$assert = new ServerAssert();
 
